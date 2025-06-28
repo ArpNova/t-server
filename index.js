@@ -11,7 +11,7 @@ app.use(cors());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "https://arpanstictactoe.vercel.app/",
+    origin: "https://arpanstictactoe.vercel.app",
     methods: ["GET", "POST"]
   }
 });
