@@ -1,5 +1,3 @@
-// ✅ server/index.js (Node.js + socket.io backend)
-
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
@@ -9,9 +7,10 @@ const app = express();
 app.use(cors());
 
 const server = http.createServer(app);
+
 const io = new Server(server, {
   cors: {
-    origin: "https://arpanstictactoe.vercel.app",
+    origin: "https://arpanstictactoe.vercel.app", 
     methods: ["GET", "POST"]
   }
 });
@@ -21,76 +20,94 @@ const rooms = {}; // roomId: { players: {X, O}, board, currentPlayer }
 io.on('connection', (socket) => {
   console.log('New client:', socket.id);
 
-  socket.on('joinRoom', (roomId) => {
-    socket.join(roomId);
-
-    if (!rooms[roomId]) {
-      rooms[roomId] = {
-        players: {},
-        board: Array(9).fill(null),
-        currentPlayer: 'X'
-      };
-    }
-
-    const room = rooms[roomId];
-    let symbol;
-    if (!room.players.X) {
-      room.players.X = socket.id;
-      symbol = 'X';
-    } else if (!room.players.O) {
-      room.players.O = socket.id;
-      symbol = 'O';
-    } else {
-      socket.emit('full');
+  // ✅ Create Room
+  socket.on("createRoom", (roomId) => {
+    if (rooms[roomId]) {
+      socket.emit("roomExists");
       return;
     }
 
-    socket.data.symbol = symbol;
+    rooms[roomId] = {
+      players: {},
+      board: Array(9).fill(null),
+      currentPlayer: "X"
+    };
+
+    socket.join(roomId);
+    rooms[roomId].players.X = socket.id;
+    socket.data.symbol = "X";
     socket.data.roomId = roomId;
 
-    socket.emit('init', {
-      symbol,
+    socket.emit("init", {
+      symbol: "X",
+      board: rooms[roomId].board,
+      currentPlayer: rooms[roomId].currentPlayer
+    });
+  });
+
+  // ✅ Join Room
+  socket.on("joinRoom", (roomId) => {
+    const room = rooms[roomId];
+    if (!room) {
+      socket.emit("noRoom");
+      return;
+    }
+
+    if (room.players.O) {
+      socket.emit("full");
+      return;
+    }
+
+    socket.join(roomId);
+    room.players.O = socket.id;
+    socket.data.symbol = "O";
+    socket.data.roomId = roomId;
+
+    socket.emit("init", {
+      symbol: "O",
       board: room.board,
       currentPlayer: room.currentPlayer
     });
+  });
 
-    socket.on('makeMove', ({ index, symbol }) => {
-      const r = rooms[socket.data.roomId];
-      if (!r || r.board[index] !== null || r.currentPlayer !== symbol) return;
+  // ✅ Game Events
+  socket.on('makeMove', ({ index, symbol }) => {
+    const room = rooms[socket.data.roomId];
+    if (!room || room.board[index] !== null || room.currentPlayer !== symbol) return;
 
-      r.board[index] = symbol;
-      r.currentPlayer = symbol === 'X' ? 'O' : 'X';
+    room.board[index] = symbol;
+    room.currentPlayer = symbol === 'X' ? 'O' : 'X';
 
-      io.to(socket.data.roomId).emit('updateBoard', {
-        board: r.board,
-        currentPlayer: r.currentPlayer
-      });
+    io.to(socket.data.roomId).emit('updateBoard', {
+      board: room.board,
+      currentPlayer: room.currentPlayer
     });
+  });
 
-    socket.on('restart', () => {
-      const r = rooms[socket.data.roomId];
-      if (!r) return;
+  socket.on('restart', () => {
+    const room = rooms[socket.data.roomId];
+    if (!room) return;
 
-      r.board = Array(9).fill(null);
-      r.currentPlayer = 'X';
+    room.board = Array(9).fill(null);
+    room.currentPlayer = 'X';
 
-      io.to(socket.data.roomId).emit('updateBoard', {
-        board: r.board,
-        currentPlayer: r.currentPlayer
-      });
+    io.to(socket.data.roomId).emit('updateBoard', {
+      board: room.board,
+      currentPlayer: room.currentPlayer
     });
+  });
 
-    socket.on('disconnect', () => {
-      const r = rooms[socket.data.roomId];
-      if (r) {
-        if (r.players.X === socket.id) delete r.players.X;
-        if (r.players.O === socket.id) delete r.players.O;
+  socket.on('disconnect', () => {
+    const room = rooms[socket.data.roomId];
+    if (room) {
+      if (room.players.X === socket.id) delete room.players.X;
+      if (room.players.O === socket.id) delete room.players.O;
 
-        r.board = Array(9).fill(null);
-        r.currentPlayer = 'X';
-        io.to(socket.data.roomId).emit('playerLeft');
-      }
-    });
+      room.board = Array(9).fill(null);
+      room.currentPlayer = 'X';
+
+      io.to(socket.data.roomId).emit('playerLeft');
+    }
   });
 });
 
