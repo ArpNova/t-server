@@ -87,15 +87,22 @@ io.on('connection', (socket) => {
   socket.on('restart', () => {
     const room = rooms[socket.data.roomId];
     if (!room) return;
-
+  
     room.board = Array(9).fill(null);
     room.currentPlayer = 'X';
-
-    io.to(socket.data.roomId).emit('updateBoard', {
-      board: room.board,
-      currentPlayer: room.currentPlayer
+  
+    // Send custom restartGame to each player with their correct symbol
+    const sockets = [room.players.X, room.players.O];
+    sockets.forEach((socketId) => {
+      const playerSymbol = socketId === room.players.X ? 'X' : 'O';
+      io.to(socketId).emit('restartGame', {
+        symbol: playerSymbol,
+        board: room.board,
+        currentPlayer: room.currentPlayer
+      });
     });
   });
+  
 
   socket.on('disconnect', () => {
     const room = rooms[socket.data.roomId];
