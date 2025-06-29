@@ -10,17 +10,17 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "https://arpanstictactoe.vercel.app", 
+    origin: "https://arpanstictactoe.vercel.app", //  No trailing slash
     methods: ["GET", "POST"]
   }
 });
 
-const rooms = {}; // roomId: { players: {X, O}, board, currentPlayer }
+const rooms = {}; // roomId: { players: {X, O}, board, currentPlayer, lastStarter }
 
 io.on('connection', (socket) => {
   console.log('New client:', socket.id);
 
-  // ✅ Create Room
+  //  Create Room
   socket.on("createRoom", (roomId) => {
     if (rooms[roomId]) {
       socket.emit("roomExists");
@@ -30,7 +30,8 @@ io.on('connection', (socket) => {
     rooms[roomId] = {
       players: {},
       board: Array(9).fill(null),
-      currentPlayer: "X"
+      currentPlayer: "X",
+      lastStarter: "O" // So X starts first time
     };
 
     socket.join(roomId);
@@ -45,7 +46,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // ✅ Join Room
+  //  Join Room
   socket.on("joinRoom", (roomId) => {
     const room = rooms[roomId];
     if (!room) {
@@ -68,9 +69,16 @@ io.on('connection', (socket) => {
       board: room.board,
       currentPlayer: room.currentPlayer
     });
+
+    // Also notify player X again to update message
+    io.to(room.players.X).emit("init", {
+      symbol: "X",
+      board: room.board,
+      currentPlayer: room.currentPlayer
+    });
   });
 
-  // ✅ Game Events
+  //  Game Logic
   socket.on('makeMove', ({ index, symbol }) => {
     const room = rooms[socket.data.roomId];
     if (!room || room.board[index] !== null || room.currentPlayer !== symbol) return;
@@ -84,14 +92,18 @@ io.on('connection', (socket) => {
     });
   });
 
+  //  Restart with alternating starter
   socket.on('restart', () => {
     const room = rooms[socket.data.roomId];
     if (!room) return;
-  
+
+    const last = room.lastStarter || 'X';
+    const nextStarter = last === 'X' ? 'O' : 'X';
+    room.lastStarter = nextStarter;
+
     room.board = Array(9).fill(null);
-    room.currentPlayer = 'X';
-  
-    // Send custom restartGame to each player with their correct symbol
+    room.currentPlayer = nextStarter;
+
     const sockets = [room.players.X, room.players.O];
     sockets.forEach((socketId) => {
       const playerSymbol = socketId === room.players.X ? 'X' : 'O';
@@ -102,8 +114,8 @@ io.on('connection', (socket) => {
       });
     });
   });
-  
 
+  //  Disconnect
   socket.on('disconnect', () => {
     const room = rooms[socket.data.roomId];
     if (room) {
