@@ -64,18 +64,17 @@ io.on('connection', (socket) => {
     socket.data.symbol = "O";
     socket.data.roomId = roomId;
 
-    socket.emit("init", {
-      symbol: "O",
-      board: room.board,
-      currentPlayer: room.currentPlayer
+    // Send both players their own symbol + common board state
+    const sockets = [room.players.X, room.players.O];
+    sockets.forEach((socketId) => {
+      const playerSymbol = socketId === room.players.X ? 'X' : 'O';
+      io.to(socketId).emit("init", {
+        symbol: playerSymbol,
+        board: room.board,
+        currentPlayer: room.currentPlayer
+      });
     });
 
-    // Also notify player X again to update message
-    io.to(room.players.X).emit("init", {
-      symbol: "X",
-      board: room.board,
-      currentPlayer: room.currentPlayer
-    });
   });
 
   //  Game Logic
